@@ -1,0 +1,63 @@
+Prediction of Exercise Activity
+========================================================
+
+## Data Loading and Cleaning
+
+The original training and testing data sets have three variables that the variable type are different after the data was loaded. Hence, variables type in training set was changed to make it consistent.
+
+```{r,echo=TRUE}
+train <- read.csv('pml-training.csv')
+test  <- read.csv('pml-testing.csv')
+
+train$magnet_dumbbell_z <- as.integer(train$magnet_dumbbell_z)
+train$magnet_forearm_y  <- as.integer(train$magnet_forearm_y)
+train$magnet_forearm_z  <- as.integer(train$magnet_forearm_z)
+```
+
+Because our goal is to predict exercise activity, only variables having records in the testing set can provide information to the prediction. Thus, columns without any value in the testing set were removed to create dataset with fewer columns. Corresponding columns in the training set were removed accordingly. Besides totally empty columns, columns 3-5 were removed as well, since they recorded information like training time, which are thought to be less informative.
+
+```{r}
+train <- train[, c(2,6:11,37:49,60:68,84:86,102,113:124,140,151:160)]
+test  <- test[, c(2,6:11,37:49,60:68,84:86,102,113:124,140,151:160)]
+```
+
+With this cleaned data, boxplots grouped by the outcome variable were created to examine any possible outliers. Record 5373 could be an outlier since the x, y, z coordinates for forearm gyros are very extreme so this record will be removed from the training set. For the same reason, records 152 and 9274 could be outliers for the y coordinate of magnet dumbbell and gyros dumbbell, respectively. To this point, the training data is ready.
+
+```{r}
+train <- train[-c(152,5373,9274)]
+```
+
+## Prediction Algorithm
+
+After data cleaning, the outcome was predicted using a random forest algorithm. A 10-fold cross-validation on the training set was performed to evaluate the prediction accuracy.
+
+```{r,results='hide'}
+library(randomForest)
+library(caret)
+
+set.seed(12321)
+
+folds <- createFolds(y = train$classe, k = 10, list = T, returnTrain = F)
+
+CV_prediction <- numeric(nrow(train))
+
+for(i in 1:10){
+
+  training <- train[-folds[[i]], ]
+  validatn <- train[folds[[i]], ]
+
+  rdmForest  <- randomForest(classe ~ ., data = training, ntree = 200, nodesize = 25)
+  CV_prediction[folds[[i]]] <- predict(rdmForest, newdata = validatn)
+  
+}
+```
+
+The prediction was very accurate as shown in the following true-predicted table:
+
+```{r}
+table(CV_prediction, train$classe)
+```
+
+## Out of Sample Prediction Error
+
+Based on the results of cross-validation, the out of sample prediction error is expected to be small because the original training data was randomly partitioned into 10 folds and in each iteration, one fold was used as a validation set and the other nine were used as training set. Because the randomness or the partitioning, all 10 folds can be treated as mutually independent and hence the prediction error in the validation set reflects the out of sample error level. Thus, we can use this random forest approach for the prediction problem. To do the prediction, fitted model was trained using the entire training set, and the prediction was performed on the testing set.
